@@ -1,0 +1,167 @@
+---
+title: "<center>Assignment 7<center>"
+author: "<center>Guandi Xu<center>"
+date: "10/24/2020"
+output: pdf_document
+---
+
+## 5.3.1 Rejection Sampling
+
+#### 1. 
+
+\begin{align}
+\int_0^{\infty}g(x)dx
+&=\int_0^{\infty}(2x^{\theta - 1} + x^{\theta-1/2}) e^{- x} dx\\
+&=2\int_0^{\infty}x^{\theta - 1} e^{- x} dx + \int_0^{\infty}x^{\theta-1/2} e^{-x} dx\\
+&=2\Gamma(\theta) + \Gamma(\theta + 1/2)
+\end{align}
+
+Since, $C=\frac{1}{\int_0^{\infty}g(x)dx}$, then $C=\frac{1}{2\Gamma(\theta) + \Gamma(\theta + 1/2)}$.
+
+Plug C into g(x), we have:
+$$
+g(x) = \frac{1}{2\Gamma(\theta) + \Gamma(\theta + 1/2)}(2x^{\theta - 1} + x^{\theta-1/2}) e^{- x}
+$$
+$$
+g(x) = \frac {2 \Gamma(\theta)}{2\Gamma(\theta) + \Gamma(\theta + 1/2)} \frac{2x^{\theta - 1} e^{- x}}{\Gamma(\theta)} +\frac {\Gamma(\theta + 1/2)}{2\Gamma(\theta) + \Gamma(\theta + 1/2)}\frac{x^{\theta-1/2} e^{- x}}{\Gamma(\theta + 1/2)}
+$$
+
+Thus, g(x) is a mixture of Gamma($\theta$,1) and Gamma($\theta+0.5$,1). Their weight are $\frac {2 \Gamma(\theta)}{2\Gamma(\theta) + \Gamma(\theta + 1/2)}$ and $\frac {\Gamma(\theta + 1/2)}{2\Gamma(\theta) + \Gamma(\theta + 1/2)}$ respectively.
+
+#### 2. 
+
+Let w and 1-w be the weight of these two component Gamma distribution respectively. After randomly generating 10000 numbers from U(0,1), if U<w, sample X~Gamma($\theta$,1), otherwise sample X~Gamma($\theta+0.5$,1).
+```{r}
+theta <- 2
+w <- 2*gamma(theta) / (2*gamma(theta) + gamma(theta + 0.5))
+U <- runif(10000,min = 0,max = 1)
+sample <- rep(0,10000)
+for(i in 1:10000){
+  if(U[i] < w){
+    sample[i] <- rgamma(1,theta,1)
+  }
+  else{
+    sample[i] <- rgamma(1,theta + 0.5,1)
+  }
+}
+plot(density(sample), main = " Estimated Density",ylim = c(0,.4),lwd = 2)
+x <- seq(0,20,0.05)
+lines(x,w*dgamma(x,theta, 1) + (1-w) * dgamma(x,theta + 0.5, 1),col = "red",lwd = 2)
+legend("topleft", c("True","Estimated"), col = c("red","black"),cex = 1,lwd = 1)
+```
+
+## 3.
+
+First we know f(x) is proportional to $q(x) = \sqrt{x + 4} x^{\theta-1} e^{-x}$, and g(x) is the “instrumental” density, $g(x) = \frac{1}{2\Gamma(\theta) + \Gamma(\theta + 1/2)}(2x^{\theta - 1} + x^{\theta-1/2}) e^{- x}$. Then all we need to determine $\alpha$, $\alpha=sup\frac{q(x)}{g(x)}$. After calculating the maximum of the ratio, we have $\alpha = \frac{\sqrt2*(2\Gamma(\theta) + \Gamma(\theta + 1/2))}{2}$. Finally we will use the same method as above by comparing U and $\frac{q(x)}{\alpha g(x)}$.
+
+```{r}
+theta <- 2
+w <- 2*gamma(theta) / (2*gamma(theta) + gamma(theta + 0.5))
+C <- 1 / (2 * gamma(theta) + gamma(theta + 0.5))
+alpha <- sqrt(2) /(2*C)
+sample <- rep(0,10000)
+for (i in 1:10000) {
+  U1 <- runif(1,0,1)
+  if(U1 < w){
+    X <- rgamma(1,theta,1)
+  }
+  else{
+    X <- rgamma(1,theta + 0.5,1)
+  }
+  U2 <- runif(1,0,1)
+  g <- C * (2 * X ^ (theta - 1) + X ^ (theta - 0.5)) * exp(-1 * X)
+  q <- sqrt(4 + X) * X^(theta - 1) * exp(-1 * X)
+  r <- q/(alpha*g)
+  if(U2<=r){
+    sample[i] <- X
+    i <- i+1
+  }
+}
+plot(density(sample), main = " Estimated Density")
+
+```
+
+## 6.3.1 Normal Mixture Revise
+
+Normal mixture general function is: 
+$$
+f(x) = \delta N(\mu_{1}, \sigma^{2}_{1})+(1-\delta)N(\mu_{2}, \sigma^{2}_{2})
+$$
+Since that we do not directly have the exact value of $\mu_1, \mu_2, \sigma_1$ and $\sigma_2$, what we only know is their distribution Normal and Inverse Gamma.
+
+First we need to generate data:
+```{r}
+delta <- 0.7 
+n <- 100
+set.seed(123)
+u <- rbinom(n, prob = delta, size = 1)
+x <- rnorm(n, ifelse(u == 1, 7, 10), 0.5)
+##Now we build likelihood function, in this case 
+##delta, mu_1, sigma_1, mu_2 and sigma_2 are all unknown, 
+##so our log-likelihood function is:
+myloglike <- function(delta,m1,m2,s1,s2,X){
+
+  sum(log(delta * dnorm(x, m1, sqrt(s1)) + (1 - delta) * dnorm(x, m2, sqrt(s2))))
+}
+##Based on the normal log-likelihood function,
+##we need to generate LOGPOST.
+library(invgamma)
+logpost <- function(delta, m1, m2, s1, s2,x){
+  m1.log <- dnorm(m1, 0, 10, log = T)
+  m2.log <- dnorm(m2, 0, 10, log = T)
+  s1.log <- dinvgamma(s1, shape = 0.5, scale = 0.1, log = T)
+  s2.log <- dinvgamma(s2, shape = 0.5, scale = 0.1, log = T)
+  sum(m1.log + m2.log +s1.log + s2.log) + myloglike(delta, m1, m2, s1, s2,x)
+}
+```
+
+
+Then we need to build our MCMC using Gibbs sampling approach:
+```{r}
+library(HI)
+##Define MCMC function
+mymcmc <- function(initial, x, niter){
+  ##Set up the output list
+  delta.new <- m1.new <- m2.new <- s1.new <- s2.new <- rep(0,niter)
+  
+  ##Set up initial value
+  delta.int <- initial[1]
+  m1.int <- initial[2]
+  m2.int <- initial[3]
+  s1.int <- initial[4]
+  s2.int <- initial[5]
+  initial <- c(delta.int,m1.int,m2.int,s1.int,s2.int)
+  
+  ##Set up values in the loop
+  delta.c <- delta.int; m1.c <- m1.int; m2.c <- m2.int; s1.c <- s1.int; s2.c <- s2.int
+  current <- c(delta.c,m1.c,m2.c,s1.c,s2.c)
+  
+  for (i in 1:niter) {
+    Db <- function(delta) logpost(delta,m1.c,m2.c,s1.c,s2.c,x)
+    delta.new[i] <- arms(delta.c,Db,function(delta)(delta>0)*(delta<1),1)
+    M1b <- function(m1) logpost(delta.new[i],m1,m2.c,s1.c,s2.c,x)
+    m1.new[i] <- arms(m1.c,M1b,function(m1)(m1>-50)*(m1<50),1)
+    M2b <- function(m2)logpost(delta.new[i],m1.new[i],m2,s1.c,s2.c,x)
+    m2.new[i] <- arms(m2.c,M2b,function(m2)(m2>-50)*(m2<50),1)
+    
+    ##Import INVGAMMA
+    library(invgamma)
+    S1b <- function(s1) logpost(delta.new[i],m1.new[i],m2.new[i],s1,s2.c,x)
+    s1.new[i] <- arms(s1.c,S1b,function(s1)(s1>0)*(s1<50),1)
+    S2b <- function(s2) logpost(delta.new[i],m1.new[i],m2.new[i],s1.new[i],s2,x)
+    s2.new[i] <- arms(s2.c,S2b,function(s2)(s2>0)*(s2<50),1)
+    new <- c(delta.new[i],m1.new[i],m2.new[i],s1.new[i],s2.new[i])
+    current <- new
+  }
+  list(delta.new=delta.new,m1.new=m1.new,m2.new=m2.new,s1.new=s1.new,s2.new=s2.new)
+}
+niter <- 2500
+initial <- c(0.5,1,2,1,2)
+MC <- mymcmc(initial,x,niter)
+##Graphs and 500 burn-in period
+hist(MC$delta.new[-(1:500)])
+hist(MC$m1.new[-(1:500)])
+hist(MC$m2.new[-(1:500)])
+hist(MC$s1.new[-(1:500)])
+hist(MC$s2.new[-(1:500)])
+```
